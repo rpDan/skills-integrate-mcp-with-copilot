@@ -16,12 +16,36 @@ body {
 }
 
 header {
+  position: relative;
   text-align: center;
   padding: 20px 0;
   margin-bottom: 30px;
   background-color: #1a237e;
   color: white;
   border-radius: 5px;
+}
+
+.account-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+.account-controls button {
+  padding: 7px 10px;
+  font-size: 14px;
+}
+
+#login-container {
+  margin: 0 auto 30px;
+}
+
+#signup-help {
+  margin-bottom: 15px;
+  color: #666;
 }
 
 header h1 {
@@ -123,6 +147,11 @@ section h3 {
 
 .delete-btn:hover {
   background-color: #ffebee;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .participants-section p {
