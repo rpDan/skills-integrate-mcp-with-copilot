@@ -22,7 +22,7 @@ current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "staic")), name="static")
 
-teachers_files = current_dir / "teachers.json"
+teachers_file = current_dir / "teachers.json"
 with teachers_file.open(encoding="utf-8") as file:
     teachers = json.load(file)
 active_tokens = set()
