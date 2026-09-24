@@ -20,7 +20,7 @@ app = FastAPI(title="Mergington High School API",
 # Mount the static files directory
 current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
-          "static")), name="static")
+          "staic")), name="static")
 
 teachers_file = current_dir / "teachers.json"
 with teachers_file.open(encoding="utf-8") as file:
