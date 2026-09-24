@@ -33,6 +33,13 @@ A super simple FastAPI application that allows students to view and sign up for 
 | POST   | `/auth/login`                                                      | Log in as a teacher                                                 |
 | POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Register a student (teacher login required)                         |
 | DELETE | `/activities/{activity_name}/unregister?email=student@mergington.edu` | Unregister a student (teacher login required)                    |
+| PATCH  | `/activities/{activity_name}/configuration` | Configure enrollment mode and leave policy (teacher login required) |
+| POST   | `/activities/{activity_name}/teams` | Create a team for team-based activities                              |
+| POST   | `/activities/{activity_name}/teams/{team_name}/join` | Join an existing team for a team-based activity           |
+| POST   | `/activities/{activity_name}/teams/{team_name}/members` | Team leader adds a member to their team                 |
+| GET    | `/activities/{activity_name}/participants` | View activity participants grouped by team (teacher login required) |
+| GET    | `/activities/{activity_name}/enrollment?email=student@mergington.edu` | View a student's current enrollment             |
+| DELETE | `/activities/{activity_name}/enrollment?email=student@mergington.edu` | Leave current enrollment where policy permits       |
 
 ## Data Model
 
@@ -42,8 +49,11 @@ The application uses a simple data model with meaningful identifiers:
 
    - Description
    - Schedule
+   - Enrollment type (`individual` or `team`)
    - Maximum number of participants allowed
-   - List of student emails who are signed up
+   - Leave policy (`allow_student_leave`)
+   - Individual activities: list of student emails who are signed up
+   - Team activities: team definitions (leader + members) with team size constraints
 
 2. **Students** - Uses email as identifier:
    - Name
