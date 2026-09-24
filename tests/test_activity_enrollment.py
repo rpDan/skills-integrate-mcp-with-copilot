@@ -147,7 +147,8 @@ class ActivityEnrollmentTests(unittest.TestCase):
         )
         self.assertEqual(not_leader.status_code, 403)
 
-    def test_leader_can_add_team_member_with_student_header(self):
+    def test_teacher_can_add_team_member(self):
+        teacher_headers = self.login_headers()
         created = self.client.post(
             "/activities/Soccer%20Team/teams",
             json={
@@ -162,9 +163,28 @@ class ActivityEnrollmentTests(unittest.TestCase):
         added = self.client.post(
             "/activities/Soccer%20Team/teams/Eagles/members",
             json={"email": "extra3@mergington.edu"},
-            headers=self.student_headers("leader3@mergington.edu"),
+            headers=teacher_headers,
         )
         self.assertEqual(added.status_code, 200)
+
+    def test_header_only_cannot_add_team_member(self):
+        created = self.client.post(
+            "/activities/Soccer%20Team/teams",
+            json={
+                "team_name": "Foxes",
+                "leader_email": "leader4@mergington.edu",
+                "members": ["member4@mergington.edu"],
+            },
+            headers=self.student_headers("leader4@mergington.edu"),
+        )
+        self.assertEqual(created.status_code, 200)
+
+        unauthorized = self.client.post(
+            "/activities/Soccer%20Team/teams/Foxes/members",
+            json={"email": "extra4@mergington.edu"},
+            headers=self.student_headers("leader4@mergington.edu"),
+        )
+        self.assertEqual(unauthorized.status_code, 401)
 
     def test_configuration_rejects_mode_change_with_active_participants(self):
         headers = self.login_headers()

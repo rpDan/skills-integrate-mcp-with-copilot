@@ -450,8 +450,7 @@ def add_team_member(
     activity_name: str,
     team_name: str,
     request: TeamMemberRequest,
-    authorization: str | None = Header(default=None),
-    x_student_email: str | None = Header(default=None),
+    _: None = Depends(require_teacher),
 ):
     activity = ensure_activity_exists(activity_name)
     if activity.get("enrollment_type", "individual") != "team":
@@ -461,10 +460,7 @@ def add_team_member(
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    if not is_teacher_authenticated(authorization):
-        if x_student_email != team["leader"]:
-            raise HTTPException(status_code=401, detail="Only the team leader can add members")
-    elif request.leader_email and request.leader_email != team["leader"]:
+    if request.leader_email and request.leader_email != team["leader"]:
         raise HTTPException(status_code=403, detail="Only the team leader can add members")
 
     ensure_not_enrolled(activity, request.email)
