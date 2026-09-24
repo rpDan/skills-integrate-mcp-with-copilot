@@ -53,20 +53,19 @@ class ActivityConfigurationRequest(BaseModel):
 
 
 def require_teacher(authorization: str | None = Header(default=None)):
-    if not authorization or not authorization.startswith("Bearer "):
+    if not is_teacher_authenticated(authorization):
         raise HTTPException(
             status_code=401,
             detail="Teacher login required",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
+def is_teacher_authenticated(authorization: str | None) -> bool:
+    if not authorization or not authorization.startswith("Bearer "):
+        return False
     token = authorization.removeprefix("Bearer ").strip()
-    if token not in active_tokens:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired teacher login",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    return token in active_tokens
 
 
 def require_teacher_or_student(
@@ -74,10 +73,8 @@ def require_teacher_or_student(
     authorization: str | None,
     x_student_email: str | None,
 ):
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.removeprefix("Bearer ").strip()
-        if token in active_tokens:
-            return
+    if is_teacher_authenticated(authorization):
+        return
     if x_student_email and x_student_email == actor_email:
         return
     raise HTTPException(status_code=401, detail="Teacher login or matching student identity required")
@@ -332,11 +329,26 @@ def configure_activity(
         else activity.get("max_team_size", 4)
     )
 
+    if configuration.enrollment_type is not None and configuration.enrollment_type not in {"individual", "team"}:
+        raise HTTPException(status_code=400, detail="Invalid enrollment_type")
+
+    if (
+        configuration.enrollment_type is not None
+        and configuration.enrollment_type != current_enrollment_type
+        and activity_participants(activity)
+    ):
+        raise HTTPException(status_code=400, detail="Cannot change enrollment type with active participants")
+
+    if configuration.min_team_size is not None and configuration.min_team_size < 1:
+        raise HTTPException(status_code=400, detail="min_team_size must be at least 1")
+
+    if configuration.max_team_size is not None and configuration.max_team_size < 1:
+        raise HTTPException(status_code=400, detail="max_team_size must be at least 1")
+
+    if target_enrollment_type == "team" and proposed_min_team_size > proposed_max_team_size:
+        raise HTTPException(status_code=400, detail="min_team_size cannot exceed max_team_size")
+
     if configuration.enrollment_type is not None:
-        if configuration.enrollment_type not in {"individual", "team"}:
-            raise HTTPException(status_code=400, detail="Invalid enrollment_type")
-        if configuration.enrollment_type != activity.get("enrollment_type", "individual") and activity_participants(activity):
-            raise HTTPException(status_code=400, detail="Cannot change enrollment type with active participants")
         activity["enrollment_type"] = configuration.enrollment_type
         if configuration.enrollment_type == "team":
             activity["teams"] = activity.get("teams", {})
@@ -349,17 +361,10 @@ def configure_activity(
             activity.pop("max_team_size", None)
             activity.setdefault("participants", [])
 
-    if target_enrollment_type == "team" and proposed_min_team_size > proposed_max_team_size:
-        raise HTTPException(status_code=400, detail="min_team_size cannot exceed max_team_size")
-
     if configuration.min_team_size is not None:
-        if configuration.min_team_size < 1:
-            raise HTTPException(status_code=400, detail="min_team_size must be at least 1")
         activity["min_team_size"] = configuration.min_team_size
 
     if configuration.max_team_size is not None:
-        if configuration.max_team_size < 1:
-            raise HTTPException(status_code=400, detail="max_team_size must be at least 1")
         activity["max_team_size"] = configuration.max_team_size
 
     if configuration.allow_student_leave is not None:
@@ -452,8 +457,12 @@ def add_team_member(
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    require_teacher_or_student(team["leader"], authorization, x_student_email)
-    if request.leader_email != team["leader"]:
+    if not is_teacher_authenticated(authorization):
+        if x_student_email != team["leader"]:
+            raise HTTPException(status_code=401, detail="Only the team leader can add members")
+        if request.leader_email != team["leader"]:
+            raise HTTPException(status_code=403, detail="Only the team leader can add members")
+    elif request.leader_email and request.leader_email != team["leader"]:
         raise HTTPException(status_code=403, detail="Only the team leader can add members")
 
     ensure_not_enrolled(activity, request.email)

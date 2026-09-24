@@ -194,6 +194,27 @@ class ActivityEnrollmentTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["detail"], "min_team_size cannot exceed max_team_size")
 
+    def test_configuration_invalid_switch_does_not_mutate_activity(self):
+        headers = self.login_headers()
+        self.client.delete(
+            "/activities/Math%20Club/unregister?email=james@mergington.edu",
+            headers=headers,
+        )
+        self.client.delete(
+            "/activities/Math%20Club/unregister?email=benjamin@mergington.edu",
+            headers=headers,
+        )
+
+        invalid = self.client.patch(
+            "/activities/Math%20Club/configuration",
+            json={"enrollment_type": "team", "min_team_size": 4, "max_team_size": 3},
+            headers=headers,
+        )
+        self.assertEqual(invalid.status_code, 400)
+
+        activities = self.client.get("/activities").json()
+        self.assertEqual(activities["Math Club"]["enrollment_type"], "individual")
+
 
 if __name__ == "__main__":
     unittest.main()
