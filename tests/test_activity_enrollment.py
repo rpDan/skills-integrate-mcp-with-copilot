@@ -128,6 +128,7 @@ class ActivityEnrollmentTests(unittest.TestCase):
         self.assertEqual(blocked.json()["detail"], "Students cannot leave this activity")
 
     def test_non_leader_cannot_add_team_member(self):
+        teacher_headers = self.login_headers()
         created = self.client.post(
             "/activities/Soccer%20Team/teams",
             json={
@@ -142,9 +143,56 @@ class ActivityEnrollmentTests(unittest.TestCase):
         not_leader = self.client.post(
             "/activities/Soccer%20Team/teams/Owls/members",
             json={"leader_email": "intruder@mergington.edu", "email": "extra2@mergington.edu"},
-            headers=self.student_headers("intruder@mergington.edu"),
+            headers=teacher_headers,
         )
         self.assertEqual(not_leader.status_code, 403)
+
+    def test_configuration_rejects_mode_change_with_active_participants(self):
+        headers = self.login_headers()
+        response = self.client.patch(
+            "/activities/Chess%20Club/configuration",
+            json={"enrollment_type": "team"},
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["detail"],
+            "Cannot change enrollment type with active participants",
+        )
+
+    def test_configuration_switches_empty_activity_to_team(self):
+        headers = self.login_headers()
+
+        clear_one = self.client.delete(
+            "/activities/Math%20Club/unregister?email=james@mergington.edu",
+            headers=headers,
+        )
+        clear_two = self.client.delete(
+            "/activities/Math%20Club/unregister?email=benjamin@mergington.edu",
+            headers=headers,
+        )
+        self.assertEqual(clear_one.status_code, 200)
+        self.assertEqual(clear_two.status_code, 200)
+
+        switched = self.client.patch(
+            "/activities/Math%20Club/configuration",
+            json={"enrollment_type": "team", "min_team_size": 2, "max_team_size": 3},
+            headers=headers,
+        )
+        self.assertEqual(switched.status_code, 200)
+        self.assertEqual(switched.json()["enrollment_type"], "team")
+        self.assertEqual(switched.json()["min_team_size"], 2)
+        self.assertEqual(switched.json()["max_team_size"], 3)
+
+    def test_configuration_rejects_invalid_team_size_range(self):
+        headers = self.login_headers()
+        response = self.client.patch(
+            "/activities/Soccer%20Team/configuration",
+            json={"min_team_size": 6, "max_team_size": 5},
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "min_team_size cannot exceed max_team_size")
 
 
 if __name__ == "__main__":

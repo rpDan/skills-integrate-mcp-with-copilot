@@ -319,6 +319,18 @@ def configure_activity(
     _: None = Depends(require_teacher),
 ):
     activity = ensure_activity_exists(activity_name)
+    current_enrollment_type = activity.get("enrollment_type", "individual")
+    target_enrollment_type = configuration.enrollment_type or current_enrollment_type
+    proposed_min_team_size = (
+        configuration.min_team_size
+        if configuration.min_team_size is not None
+        else activity.get("min_team_size", 2)
+    )
+    proposed_max_team_size = (
+        configuration.max_team_size
+        if configuration.max_team_size is not None
+        else activity.get("max_team_size", 4)
+    )
 
     if configuration.enrollment_type is not None:
         if configuration.enrollment_type not in {"individual", "team"}:
@@ -337,6 +349,9 @@ def configure_activity(
             activity.pop("max_team_size", None)
             activity.setdefault("participants", [])
 
+    if target_enrollment_type == "team" and proposed_min_team_size > proposed_max_team_size:
+        raise HTTPException(status_code=400, detail="min_team_size cannot exceed max_team_size")
+
     if configuration.min_team_size is not None:
         if configuration.min_team_size < 1:
             raise HTTPException(status_code=400, detail="min_team_size must be at least 1")
@@ -346,12 +361,6 @@ def configure_activity(
         if configuration.max_team_size < 1:
             raise HTTPException(status_code=400, detail="max_team_size must be at least 1")
         activity["max_team_size"] = configuration.max_team_size
-
-    if (
-        activity.get("enrollment_type", "individual") == "team"
-        and activity.get("min_team_size", 1) > activity.get("max_team_size", 1)
-    ):
-        raise HTTPException(status_code=400, detail="min_team_size cannot exceed max_team_size")
 
     if configuration.allow_student_leave is not None:
         activity["allow_student_leave"] = configuration.allow_student_leave
@@ -443,7 +452,7 @@ def add_team_member(
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    require_teacher_or_student(request.leader_email or "", authorization, x_student_email)
+    require_teacher_or_student(team["leader"], authorization, x_student_email)
     if request.leader_email != team["leader"]:
         raise HTTPException(status_code=403, detail="Only the team leader can add members")
 
