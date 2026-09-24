@@ -28,6 +28,9 @@ class ActivityEnrollmentTests(unittest.TestCase):
         token = response.json()["access_token"]
         return {"Authorization": "Bearer " + token}
 
+    def student_headers(self, email):
+        return {"X-Student-Email": email}
+
     def test_individual_signup_prevents_duplicate_and_capacity(self):
         headers = self.login_headers()
 
@@ -55,6 +58,7 @@ class ActivityEnrollmentTests(unittest.TestCase):
         too_small = self.client.post(
             "/activities/Soccer%20Team/teams",
             json={"team_name": "Falcons", "leader_email": "captain@mergington.edu", "members": []},
+            headers=self.student_headers("captain@mergington.edu"),
         )
         self.assertEqual(too_small.status_code, 400)
 
@@ -65,18 +69,21 @@ class ActivityEnrollmentTests(unittest.TestCase):
                 "leader_email": "captain@mergington.edu",
                 "members": ["mate@mergington.edu"],
             },
+            headers=self.student_headers("captain@mergington.edu"),
         )
         self.assertEqual(created.status_code, 200)
 
         joined = self.client.post(
             "/activities/Soccer%20Team/teams/Falcons/join",
             json={"email": "new@mergington.edu"},
+            headers=self.student_headers("new@mergington.edu"),
         )
         self.assertEqual(joined.status_code, 200)
 
         duplicate = self.client.post(
             "/activities/Soccer%20Team/teams/Falcons/join",
             json={"email": "new@mergington.edu"},
+            headers=self.student_headers("new@mergington.edu"),
         )
         self.assertEqual(duplicate.status_code, 400)
         self.assertEqual(duplicate.json()["detail"], "Student is already signed up")
@@ -91,6 +98,7 @@ class ActivityEnrollmentTests(unittest.TestCase):
                 "leader_email": "leader@mergington.edu",
                 "members": ["member@mergington.edu"],
             },
+            headers=self.student_headers("leader@mergington.edu"),
         )
         self.assertEqual(created.status_code, 200)
 
@@ -100,17 +108,43 @@ class ActivityEnrollmentTests(unittest.TestCase):
         self.assertTrue(any(team["team_name"] == "Wolves" for team in grouped.json()["teams"]))
 
         enrollment = self.client.get(
-            "/activities/Soccer%20Team/enrollment?email=leader@mergington.edu"
+            "/activities/Soccer%20Team/enrollment?email=leader@mergington.edu",
+            headers=self.student_headers("leader@mergington.edu"),
         )
         self.assertEqual(enrollment.status_code, 200)
         self.assertTrue(enrollment.json()["enrolled"])
 
-        left = self.client.delete("/activities/Soccer%20Team/enrollment?email=member@mergington.edu")
+        left = self.client.delete(
+            "/activities/Soccer%20Team/enrollment?email=member@mergington.edu",
+            headers=self.student_headers("member@mergington.edu"),
+        )
         self.assertEqual(left.status_code, 200)
 
-        blocked = self.client.delete("/activities/Debate%20Team/enrollment?email=henry@mergington.edu")
+        blocked = self.client.delete(
+            "/activities/Debate%20Team/enrollment?email=henry@mergington.edu",
+            headers=self.student_headers("henry@mergington.edu"),
+        )
         self.assertEqual(blocked.status_code, 403)
         self.assertEqual(blocked.json()["detail"], "Students cannot leave this activity")
+
+    def test_non_leader_cannot_add_team_member(self):
+        created = self.client.post(
+            "/activities/Soccer%20Team/teams",
+            json={
+                "team_name": "Owls",
+                "leader_email": "leader2@mergington.edu",
+                "members": ["member2@mergington.edu"],
+            },
+            headers=self.student_headers("leader2@mergington.edu"),
+        )
+        self.assertEqual(created.status_code, 200)
+
+        not_leader = self.client.post(
+            "/activities/Soccer%20Team/teams/Owls/members",
+            json={"leader_email": "intruder@mergington.edu", "email": "extra2@mergington.edu"},
+            headers=self.student_headers("intruder@mergington.edu"),
+        )
+        self.assertEqual(not_leader.status_code, 403)
 
 
 if __name__ == "__main__":

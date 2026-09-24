@@ -69,6 +69,20 @@ def require_teacher(authorization: str | None = Header(default=None)):
         )
 
 
+def require_teacher_or_student(
+    actor_email: str,
+    authorization: str | None,
+    x_student_email: str | None,
+):
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        if token in active_tokens:
+            return
+    if x_student_email and x_student_email == actor_email:
+        return
+    raise HTTPException(status_code=401, detail="Teacher login or matching student identity required")
+
+
 @app.post("/auth/login")
 def login(credentials: LoginRequest):
     teacher = next(
@@ -276,18 +290,21 @@ def unregister_from_activity(activity_name: str, email: str, _: None = Depends(r
         raise HTTPException(status_code=400, detail="Student is not signed up for this activity")
 
     if activity.get("enrollment_type", "individual") == "team":
+        removed_team_name = None
         for team in activity.get("teams", {}).values():
             if email in team["members"]:
                 team["members"].remove(email)
+                removed_team_name = next(
+                    name for name, existing_team in activity["teams"].items() if existing_team is team
+                )
                 if not team["members"]:
                     break
                 if team["leader"] == email:
                     team["leader"] = team["members"][0]
                 refresh_team_participants(activity)
                 return {"message": f"Unregistered {email} from {activity_name}"}
-        empty_teams = [name for name, team in activity.get("teams", {}).items() if not team["members"]]
-        for team_name in empty_teams:
-            del activity["teams"][team_name]
+        if removed_team_name and not activity["teams"][removed_team_name]["members"]:
+            del activity["teams"][removed_team_name]
         refresh_team_participants(activity)
         return {"message": f"Unregistered {email} from {activity_name}"}
 
@@ -346,10 +363,16 @@ def configure_activity(
 
 
 @app.post("/activities/{activity_name}/teams")
-def create_team(activity_name: str, request: TeamCreateRequest):
+def create_team(
+    activity_name: str,
+    request: TeamCreateRequest,
+    authorization: str | None = Header(default=None),
+    x_student_email: str | None = Header(default=None),
+):
     activity = ensure_activity_exists(activity_name)
     if activity.get("enrollment_type", "individual") != "team":
         raise HTTPException(status_code=400, detail="Activity is not team-based")
+    require_teacher_or_student(request.leader_email, authorization, x_student_email)
 
     if request.team_name in activity.get("teams", {}):
         raise HTTPException(status_code=400, detail="Team already exists")
@@ -378,10 +401,17 @@ def create_team(activity_name: str, request: TeamCreateRequest):
 
 
 @app.post("/activities/{activity_name}/teams/{team_name}/join")
-def join_team(activity_name: str, team_name: str, request: TeamMemberRequest):
+def join_team(
+    activity_name: str,
+    team_name: str,
+    request: TeamMemberRequest,
+    authorization: str | None = Header(default=None),
+    x_student_email: str | None = Header(default=None),
+):
     activity = ensure_activity_exists(activity_name)
     if activity.get("enrollment_type", "individual") != "team":
         raise HTTPException(status_code=400, detail="Activity is not team-based")
+    require_teacher_or_student(request.email, authorization, x_student_email)
 
     team = activity.get("teams", {}).get(team_name)
     if team is None:
@@ -398,7 +428,13 @@ def join_team(activity_name: str, team_name: str, request: TeamMemberRequest):
 
 
 @app.post("/activities/{activity_name}/teams/{team_name}/members")
-def add_team_member(activity_name: str, team_name: str, request: TeamMemberRequest):
+def add_team_member(
+    activity_name: str,
+    team_name: str,
+    request: TeamMemberRequest,
+    authorization: str | None = Header(default=None),
+    x_student_email: str | None = Header(default=None),
+):
     activity = ensure_activity_exists(activity_name)
     if activity.get("enrollment_type", "individual") != "team":
         raise HTTPException(status_code=400, detail="Activity is not team-based")
@@ -407,6 +443,7 @@ def add_team_member(activity_name: str, team_name: str, request: TeamMemberReque
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
 
+    require_teacher_or_student(request.leader_email or "", authorization, x_student_email)
     if request.leader_email != team["leader"]:
         raise HTTPException(status_code=403, detail="Only the team leader can add members")
 
@@ -438,8 +475,14 @@ def get_activity_participants(activity_name: str, _: None = Depends(require_teac
 
 
 @app.get("/activities/{activity_name}/enrollment")
-def get_student_enrollment(activity_name: str, email: str):
+def get_student_enrollment(
+    activity_name: str,
+    email: str,
+    authorization: str | None = Header(default=None),
+    x_student_email: str | None = Header(default=None),
+):
     activity = ensure_activity_exists(activity_name)
+    require_teacher_or_student(email, authorization, x_student_email)
     if activity.get("enrollment_type", "individual") == "team":
         for team_name, team in activity.get("teams", {}).items():
             if email in team["members"]:
@@ -464,8 +507,14 @@ def get_student_enrollment(activity_name: str, email: str):
 
 
 @app.delete("/activities/{activity_name}/enrollment")
-def leave_enrollment(activity_name: str, email: str):
+def leave_enrollment(
+    activity_name: str,
+    email: str,
+    authorization: str | None = Header(default=None),
+    x_student_email: str | None = Header(default=None),
+):
     activity = ensure_activity_exists(activity_name)
+    require_teacher_or_student(email, authorization, x_student_email)
     if not activity.get("allow_student_leave", True):
         raise HTTPException(status_code=403, detail="Students cannot leave this activity")
 

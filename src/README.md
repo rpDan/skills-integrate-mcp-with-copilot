@@ -62,3 +62,5 @@ The application uses a simple data model with meaningful identifiers:
 All data is stored in memory, which means data will be reset when the server restarts.
 
 Teacher credentials are stored in `teachers.json` for this exercise. The default account is `teacher` with password `mergington-teacher`.
+
+Student self-service endpoints accept either teacher authorization or a matching `X-Student-Email` header.
