@@ -87,7 +87,7 @@ def require_teacher_or_student(
     if x_student_email and x_student_email == actor_email:
         return
     detail = "Invalid or expired teacher login" if auth_status == "invalid" else "Teacher login or matching student identity required"
-    raise HTTPException(status_code=401, detail=detail)
+    raise HTTPException(status_code=401, detail=detail, headers={"WWW-Authenticate": "Bearer"})
 
 
 @app.post("/auth/login")
@@ -540,7 +540,7 @@ def leave_enrollment(
         raise HTTPException(status_code=403, detail="Students cannot leave this activity")
 
     if email not in activity_participants(activity):
-        raise HTTPException(status_code=404, detail="Student is not currently enrolled")
+        raise HTTPException(status_code=400, detail="Student is not signed up for this activity")
 
     if activity.get("enrollment_type", "individual") == "team":
         for team_name, team in list(activity.get("teams", {}).items()):
@@ -556,4 +556,4 @@ def leave_enrollment(
         activity["participants"].remove(email)
         return {"message": f"{email} left {activity_name}"}
 
-    raise HTTPException(status_code=404, detail="Student is not currently enrolled")
+    raise HTTPException(status_code=400, detail="Student is not signed up for this activity")
