@@ -215,6 +215,42 @@ class ActivityEnrollmentTests(unittest.TestCase):
         activities = self.client.get("/activities").json()
         self.assertEqual(activities["Math Club"]["enrollment_type"], "individual")
 
+    def test_configuration_rejects_team_size_for_individual_mode(self):
+        headers = self.login_headers()
+        response = self.client.patch(
+            "/activities/Chess%20Club/configuration",
+            json={"min_team_size": 2},
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["detail"],
+            "Team size settings require team enrollment",
+        )
+
+    def test_allow_student_leave_configuration_controls_self_service_leave(self):
+        headers = self.login_headers()
+
+        updated = self.client.patch(
+            "/activities/Chess%20Club/configuration",
+            json={"allow_student_leave": False},
+            headers=headers,
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertFalse(updated.json()["allow_student_leave"])
+
+        student_leave = self.client.delete(
+            "/activities/Chess%20Club/enrollment?email=michael@mergington.edu",
+            headers=self.student_headers("michael@mergington.edu"),
+        )
+        self.assertEqual(student_leave.status_code, 403)
+
+        teacher_leave = self.client.delete(
+            "/activities/Chess%20Club/enrollment?email=michael@mergington.edu",
+            headers=headers,
+        )
+        self.assertEqual(teacher_leave.status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()

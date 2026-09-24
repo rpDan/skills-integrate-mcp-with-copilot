@@ -347,6 +347,10 @@ def configure_activity(
 
     if target_enrollment_type == "team" and proposed_min_team_size > proposed_max_team_size:
         raise HTTPException(status_code=400, detail="min_team_size cannot exceed max_team_size")
+    if target_enrollment_type != "team" and (
+        configuration.min_team_size is not None or configuration.max_team_size is not None
+    ):
+        raise HTTPException(status_code=400, detail="Team size settings require team enrollment")
 
     if configuration.enrollment_type is not None:
         activity["enrollment_type"] = configuration.enrollment_type
@@ -533,7 +537,7 @@ def leave_enrollment(
 ):
     activity = ensure_activity_exists(activity_name)
     require_teacher_or_student(email, authorization, x_student_email)
-    if not activity.get("allow_student_leave", True):
+    if not activity.get("allow_student_leave", True) and not is_teacher_authenticated(authorization):
         raise HTTPException(status_code=403, detail="Students cannot leave this activity")
 
     if email not in activity_participants(activity):
