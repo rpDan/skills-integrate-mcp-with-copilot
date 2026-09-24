@@ -147,6 +147,25 @@ class ActivityEnrollmentTests(unittest.TestCase):
         )
         self.assertEqual(not_leader.status_code, 403)
 
+    def test_leader_can_add_team_member_with_student_header(self):
+        created = self.client.post(
+            "/activities/Soccer%20Team/teams",
+            json={
+                "team_name": "Eagles",
+                "leader_email": "leader3@mergington.edu",
+                "members": ["member3@mergington.edu"],
+            },
+            headers=self.student_headers("leader3@mergington.edu"),
+        )
+        self.assertEqual(created.status_code, 200)
+
+        added = self.client.post(
+            "/activities/Soccer%20Team/teams/Eagles/members",
+            json={"email": "extra3@mergington.edu"},
+            headers=self.student_headers("leader3@mergington.edu"),
+        )
+        self.assertEqual(added.status_code, 200)
+
     def test_configuration_rejects_mode_change_with_active_participants(self):
         headers = self.login_headers()
         response = self.client.patch(

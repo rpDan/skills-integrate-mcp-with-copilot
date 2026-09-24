@@ -356,8 +356,8 @@ def configure_activity(
         activity["enrollment_type"] = configuration.enrollment_type
         if configuration.enrollment_type == "team":
             activity["teams"] = activity.get("teams", {})
-            activity.setdefault("min_team_size", 2)
-            activity.setdefault("max_team_size", 4)
+            activity["min_team_size"] = proposed_min_team_size
+            activity["max_team_size"] = proposed_max_team_size
             refresh_team_participants(activity)
         else:
             activity.pop("teams", None)
@@ -464,8 +464,6 @@ def add_team_member(
     if not is_teacher_authenticated(authorization):
         if x_student_email != team["leader"]:
             raise HTTPException(status_code=401, detail="Only the team leader can add members")
-        if request.leader_email != team["leader"]:
-            raise HTTPException(status_code=403, detail="Only the team leader can add members")
     elif request.leader_email and request.leader_email != team["leader"]:
         raise HTTPException(status_code=403, detail="Only the team leader can add members")
 
