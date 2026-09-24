@@ -53,19 +53,27 @@ class ActivityConfigurationRequest(BaseModel):
 
 
 def require_teacher(authorization: str | None = Header(default=None)):
-    if not is_teacher_authenticated(authorization):
+    auth_status = teacher_auth_status(authorization)
+    if auth_status != "valid":
+        detail = "Invalid or expired teacher login" if auth_status == "invalid" else "Teacher login required"
         raise HTTPException(
             status_code=401,
-            detail="Teacher login required",
+            detail=detail,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
 
 def is_teacher_authenticated(authorization: str | None) -> bool:
+    return teacher_auth_status(authorization) == "valid"
+
+
+def teacher_auth_status(authorization: str | None) -> str:
     if not authorization or not authorization.startswith("Bearer "):
-        return False
+        return "missing"
     token = authorization.removeprefix("Bearer ").strip()
-    return token in active_tokens
+    if token in active_tokens:
+        return "valid"
+    return "invalid"
 
 
 def require_teacher_or_student(
@@ -73,11 +81,13 @@ def require_teacher_or_student(
     authorization: str | None,
     x_student_email: str | None,
 ):
-    if is_teacher_authenticated(authorization):
+    auth_status = teacher_auth_status(authorization)
+    if auth_status == "valid":
         return
     if x_student_email and x_student_email == actor_email:
         return
-    raise HTTPException(status_code=401, detail="Teacher login or matching student identity required")
+    detail = "Invalid or expired teacher login" if auth_status == "invalid" else "Teacher login or matching student identity required"
+    raise HTTPException(status_code=401, detail=detail)
 
 
 @app.post("/auth/login")
@@ -288,12 +298,10 @@ def unregister_from_activity(activity_name: str, email: str, _: None = Depends(r
 
     if activity.get("enrollment_type", "individual") == "team":
         removed_team_name = None
-        for team in activity.get("teams", {}).values():
+        for team_name, team in activity.get("teams", {}).items():
             if email in team["members"]:
                 team["members"].remove(email)
-                removed_team_name = next(
-                    name for name, existing_team in activity["teams"].items() if existing_team is team
-                )
+                removed_team_name = team_name
                 if not team["members"]:
                     break
                 if team["leader"] == email:
@@ -459,9 +467,6 @@ def add_team_member(
     team = activity.get("teams", {}).get(team_name)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
-
-    if request.leader_email and request.leader_email != team["leader"]:
-        raise HTTPException(status_code=403, detail="Only the team leader can add members")
 
     ensure_not_enrolled(activity, request.email)
     if len(team["members"]) >= activity.get("max_team_size", 4):

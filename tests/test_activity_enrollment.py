@@ -127,7 +127,7 @@ class ActivityEnrollmentTests(unittest.TestCase):
         self.assertEqual(blocked.status_code, 403)
         self.assertEqual(blocked.json()["detail"], "Students cannot leave this activity")
 
-    def test_non_leader_cannot_add_team_member(self):
+    def test_teacher_can_add_member_even_with_mismatched_leader_email(self):
         teacher_headers = self.login_headers()
         created = self.client.post(
             "/activities/Soccer%20Team/teams",
@@ -140,12 +140,12 @@ class ActivityEnrollmentTests(unittest.TestCase):
         )
         self.assertEqual(created.status_code, 200)
 
-        not_leader = self.client.post(
+        added = self.client.post(
             "/activities/Soccer%20Team/teams/Owls/members",
             json={"leader_email": "intruder@mergington.edu", "email": "extra2@mergington.edu"},
             headers=teacher_headers,
         )
-        self.assertEqual(not_leader.status_code, 403)
+        self.assertEqual(added.status_code, 200)
 
     def test_teacher_can_add_team_member(self):
         teacher_headers = self.login_headers()
